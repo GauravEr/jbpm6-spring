@@ -1,0 +1,114 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:jee="http://www.springframework.org/schema/jee" xmlns:util="http://www.springframework.org/schema/util"
+	xmlns:cache="http://www.springframework.org/schema/cache" xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+		http://www.springframework.org/schema/cache http://www.springframework.org/schema/cache/spring-cache.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+		http://drools.org/schema/drools-spring http://drools.org/schema/drools-spring-1.3.0.xsd
+		http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee.xsd
+		http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-3.0.xsd">
+
+	<description><![CDATA[
+		Bean configurations
+  	]]></description>
+
+	<!-- <context:annotation-config /> -->
+	<context:component-scan base-package="com.spring.jbpm" />
+
+	<bean id="entityManagerFactory"
+		class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+		<property name="persistenceXmlLocation" value="classpath*:META-INF/persistence.xml" />
+		<property name="persistenceUnitName" value="org.jbpm.persistence.local" />
+		<!-- If you want to use any other database as like postgrsql, mySQL and Oracle, uncomment dataSource line -->
+		<!-- <property name="dataSource" ref="jbpmDataSource" /> -->
+		<property name="jpaVendorAdapter">
+			<bean class="org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter">
+				<property name="showSql" value="false" />
+				<!-- For PostgreSQL -->
+				<!-- <property name="databasePlatform" value="org.hibernate.dialect.PostgreSQLDialect" /> -->
+				<!-- For H2 Embedded DB -->
+				<property name="databasePlatform" value="org.hibernate.dialect.H2Dialect" />
+			</bean>
+		</property>
+	</bean>
+
+	<!-- Embedded H2 database -->
+	
+  	<bean id="BitronixTransactionManager" factory-method="getTransactionManager"
+		class="bitronix.tm.TransactionManagerServices" destroy-method="shutdown" />
+
+	<bean id="jbpmTxManager"
+		class="org.springframework.transaction.jta.JtaTransactionManager">
+		<property name="transactionManager" ref="BitronixTransactionManager" />
+		<property name="userTransaction" ref="BitronixTransactionManager" />
+	</bean>
+
+	<!-- If you want to use any other database as like postgrsql, mySQL and Oracle, 
+	uncomment below jbpmTxManager bean configuration and comment the above two bean configurations 
+	for embedded H2 database (BitronixTransactionManager,jbpmTxManager)-->
+	
+	<!-- <bean id="jbpmTxManager" class="org.springframework.orm.jpa.JpaTransactionManager"> 
+		<property name="entityManagerFactory" ref="entityManagerFactory" /> <property 
+		name="nestedTransactionAllowed" value="false" /> </bean> -->
+
+	<bean id="process" factory-method="newClassPathResource"
+		class="org.kie.internal.io.ResourceFactory">
+		<constructor-arg>
+			<value>META-INF/spring/bpmn/sample.bpmn</value>
+		</constructor-arg>
+	</bean>
+	<bean id="userGroupCallback" class="com.spring.jbpm.JBPMUserGroupCallback"/>
+	
+	<bean id="taskService" class="org.kie.spring.factorybeans.TaskServiceFactoryBean"
+		destroy-method="close">
+		<property name="entityManagerFactory" ref="entityManagerFactory" />
+		<property name="transactionManager" ref="jbpmTxManager" />
+		<property name="userGroupCallback" ref="userGroupCallback"/>
+		<property name="listeners">
+			<list>
+				<bean class="org.jbpm.services.task.audit.JPATaskLifeCycleEventListener">
+					<constructor-arg><value>true</value></constructor-arg>
+				</bean>
+			</list>
+		</property>
+	</bean>
+
+	<bean id="runtimeEnvironment"
+		class="org.kie.spring.factorybeans.RuntimeEnvironmentFactoryBean">
+		<property name="type" value="DEFAULT" />
+		<property name="entityManagerFactory" ref="entityManagerFactory" />
+		<property name="transactionManager" ref="jbpmTxManager" />
+		<property name="assets">
+			<map>
+				<entry key-ref="process">
+					<util:constant static-field="org.kie.api.io.ResourceType.BPMN2" />
+				</entry>
+			</map>
+		</property>
+		<property name="taskService" ref="taskService" />
+	</bean>
+
+	<bean id="runtimeManager" class="org.kie.spring.factorybeans.RuntimeManagerFactoryBean"
+		destroy-method="close">
+		<property name="identifier" value="spring-rm" />
+		<property name="runtimeEnvironment" ref="runtimeEnvironment" />
+	</bean>
+
+	<bean id="logService" class="org.jbpm.process.audit.JPAAuditLogService">
+		<constructor-arg>
+			<ref bean="entityManagerFactory" />
+		</constructor-arg>
+	</bean>
+
+	<!-- Uncomment the below database configuration for other database as like postgrsql, mySQL and Oracle,-->
+	<!-- <bean id="jbpmDataSource"
+		class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+		<property name="driverClassName" value="org.postgresql.Driver" />
+		<property name="url" value="jdbc:postgresql:jbpmdb" />
+		<property name="username" value="postgres" />
+		<property name="password" value="xxxx" />
+	</bean> -->
+</beans>
